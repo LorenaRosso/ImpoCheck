@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ImpoCheck - Calculadora Aduanera</title>
+    <!-- SDK oficial de Telegram Mini Apps -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            margin: 0;
+            padding: 16px;
+        }
+        .container {
+            max-width: 400px;
+            margin: auto;
+        }
+        input, select {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0 16px 0;
+            box-sizing: border-box;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+        }
+        button {
+            background-color: var(--tg-theme-button-color, #2481cc);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            padding: 14px;
+            width: 100%;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 16px;
+            background: rgba(0,0,0,0.05);
+            border-radius: 8px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>ImpoCheck 🧮</h2>
+        <p style="font-size: 14px; opacity: 0.8;">Simulador rápido de costos aduaneros.</p>
+        
+        <label for="fob">Valor FOB del producto (USD):</label>
+        <input type="number" id="fob" placeholder="Ej. 150">
+
+        <label for="category">Categoría:</label>
+        <select id="category">
+            <option value="tech">Tecnología / Electrónica</option>
+            <option value="clothes">Indumentaria / Textil</option>
+            <option value="misc">Varios / Insumos</option>
+        </select>
+
+        <button id="calc-btn">Calcular Costo Estimado</button>
+
+        <div id="result-box" class="result">
+            <h3>Resultado Estimado:</h3>
+            <p id="output-text"></p>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Expande la Mini App a pantalla completa
+
+        document.getElementById('calc-btn').addEventListener('click', () => {
+            const fob = parseFloat(document.getElementById('fob').value) || 0;
+            
+            if (fob <= 0) {
+                alert("Por favor ingresa un valor FOB válido.");
+                return;
+            }
+
+            // Lógica base de simulación
+            let arancel = fob * 0.35;
+            let tasaEstadistica = fob * 0.03;
+            let iva = (fob + arancel) * 0.21;
+            let totalEstimado = fob + arancel + tasaEstadistica + iva;
+
+            const resultBox = document.getElementById('result-box');
+            const outputText = document.getElementById('output-text');
+            
+            outputText.innerHTML = `
+                Valor Producto: <b>$${fob.toFixed(2)} USD</b><br>
+                Cargos Fiscales Est.: <b>$${(arancel + iva + tasaEstadistica).toFixed(2)} USD</b><br><hr style="border:0; border-top:1px solid #ccc; margin:8px 0;">
+                <strong>Total Final Aprox: $${totalEstimado.toFixed(2)} USD</strong>
+            `;
+            resultBox.style.display = 'block';
+
+            if (tg.HapticFeedback) {
+                tg.HapticFeedback.notificationOccurred('success');
+            }
+        });
+    </script>
+</body>
+</html>
