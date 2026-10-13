@@ -9,14 +9,27 @@ Simulador rápido de costos estimados de importación (arancel, tasa estadístic
 
 ## ¿Qué hace?
 
-A partir del valor FOB de un producto y su categoría (Tecnología/Electrónica, Indumentaria/Textil, Varios/Insumos), calcula una estimación de:
+A partir del valor de la mercadería, el Incoterm® 2020 pactado, flete, seguro (si corresponde) y categoría del producto (Tecnología/Electrónica, Indumentaria/Textil, Varios/Insumos), calcula una estimación de:
 
+- Valor en Aduana (base imponible)
 - Arancel aduanero (según categoría)
 - Tasa estadística (3%)
-- IVA (21%, sobre base FOB + arancel + tasa estadística)
+- IVA (21%, sobre Valor en Aduana + arancel + tasa estadística)
 - Total estimado en aduana
 
-> ⚠️ Es un simulador orientativo. Las tasas reales varían según posición arancelaria, acuerdos comerciales vigentes y normativa de AFIP/Aduana al momento de la operación — no reemplaza una liquidación oficial.
+### Incoterms® 2020 soportados
+
+Los 11 términos de la ICC, agrupados según si el flete y el seguro ya vienen incluidos en el valor cotizado o hay que sumarlos aparte:
+
+| Grupo | Incoterms | Flete | Seguro |
+|---|---|---|---|
+| Vendedor no asume transporte | EXW, FCA, FAS, FOB | Lo paga el comprador (sumalo en la app) | No obligatorio para el vendedor |
+| Vendedor paga flete, no seguro | CFR, CPT, DAP, DPU, DDP | Ya incluido en el valor | No obligatorio para el vendedor |
+| Vendedor paga flete y seguro | CIF, CIP | Ya incluido en el valor | Ya incluido en el valor |
+
+La app habilita o deshabilita los campos de Flete y Seguro automáticamente según el Incoterm elegido, para no duplicar un costo que ya está en el valor cotizado.
+
+> ⚠️ El campo Seguro es un monto manual: la app no calcula primas de seguro (varían por aseguradora, mercadería y ruta), solo suma lo que el usuario ingresa. Tampoco reemplaza una liquidación oficial — las tasas reales varían según posición arancelaria (NCM), acuerdos comerciales vigentes y normativa de AFIP/Aduana al momento de la operación.
 
 ## Por qué existe
 

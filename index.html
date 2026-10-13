@@ -27,6 +27,10 @@
             border: 1px solid #ccc;
             font-size: 16px;
         }
+        input:disabled {
+            background: #f0f0f0;
+            color: #999;
+        }
         button {
             background-color: var(--tg-theme-button-color, #2481cc);
             color: var(--tg-theme-button-text-color, #ffffff);
@@ -45,6 +49,29 @@
             border-radius: 8px;
             display: none;
         }
+        .hint {
+            font-size: 12px;
+            opacity: 0.65;
+            margin-top: -12px;
+            margin-bottom: 16px;
+        }
+        .disclaimer {
+            font-size: 12px;
+            opacity: 0.6;
+            margin-top: 16px;
+            line-height: 1.4;
+        }
+        .error-box {
+            display: none;
+            background: #fdecea;
+            border: 1px solid #f5c2c0;
+            color: #a12620;
+            border-radius: 8px;
+            padding: 12px 14px;
+            font-size: 13px;
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
     </style>
 </head>
 <body>
@@ -52,8 +79,31 @@
         <h2>ImpoCheck 🧮</h2>
         <p style="font-size: 14px; opacity: 0.8;">Simulador rápido de costos aduaneros.</p>
 
-        <label for="fob">Valor FOB del producto (USD):</label>
-        <input type="number" id="fob" placeholder="Ej. 150">
+        <label for="incoterm">Incoterm (2020):</label>
+        <select id="incoterm">
+            <option value="EXW">EXW - Ex Works</option>
+            <option value="FCA">FCA - Free Carrier</option>
+            <option value="FAS">FAS - Free Alongside Ship</option>
+            <option value="FOB" selected>FOB - Free On Board</option>
+            <option value="CFR">CFR - Cost and Freight</option>
+            <option value="CIF">CIF - Cost, Insurance and Freight</option>
+            <option value="CPT">CPT - Carriage Paid To</option>
+            <option value="CIP">CIP - Carriage and Insurance Paid To</option>
+            <option value="DAP">DAP - Delivered At Place</option>
+            <option value="DPU">DPU - Delivered At Place Unloaded</option>
+            <option value="DDP">DDP - Delivered Duty Paid</option>
+        </select>
+
+        <label for="valor">Valor de la mercadería según Incoterm (USD):</label>
+        <input type="number" id="valor" placeholder="Ej. 150" min="0" step="0.01" inputmode="decimal" required>
+
+        <label for="flete">Flete internacional (USD):</label>
+        <input type="number" id="flete" placeholder="0" value="0" min="0" step="0.01" inputmode="decimal">
+        <div class="hint" id="flete-hint"></div>
+
+        <label for="seguro">Seguro internacional (USD):</label>
+        <input type="number" id="seguro" placeholder="0" value="0" min="0" step="0.01" inputmode="decimal">
+        <div class="hint" id="seguro-hint"></div>
 
         <label for="category">Categoría:</label>
         <select id="category">
@@ -62,26 +112,165 @@
             <option value="misc">Varios / Insumos</option>
         </select>
 
+        <div class="error-box" id="error-box"></div>
+
         <button id="calc-btn">Calcular Costo Estimado</button>
 
         <div id="result-box" class="result">
             <h3>Resultado Estimado:</h3>
             <p id="output-text"></p>
         </div>
+
+        <p class="disclaimer">
+            El seguro es un monto manual: la app no calcula primas de seguro, solo suma lo que ingreses.
+            Aranceles estimados por categoría, no por posición arancelaria (NCM) real.
+            No reemplaza una liquidación oficial de AFIP/Aduana.
+        </p>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         if (tg) tg.expand(); // Expande la Mini App a pantalla completa (si corre dentro de Telegram)
 
+        // Incoterms cuyo valor de mercadería YA incluye el flete internacional hasta destino/puerto.
+        // En esos casos el campo de flete queda deshabilitado (no hay que sumarlo de nuevo).
+        const FLETE_INCLUIDO = new Set(['CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP']);
+
+        // Según Incoterms® 2020, SOLO CIF y CIP obligan al vendedor a contratar seguro
+        // a beneficio del comprador; en el resto no está contemplado en el valor cotizado.
+        const SEGURO_INCLUIDO = new Set(['CIF', 'CIP']);
+
+        const incotermSelect = document.getElementById('incoterm');
+        const fleteInput = document.getElementById('flete');
+        const fleteHint = document.getElementById('flete-hint');
+        const seguroInput = document.getElementById('seguro');
+        const seguroHint = document.getElementById('seguro-hint');
+
+        function actualizarCampoFlete() {
+            const incoterm = incotermSelect.value;
+            if (FLETE_INCLUIDO.has(incoterm)) {
+                fleteInput.value = 0;
+                fleteInput.disabled = true;
+                fleteHint.textContent = `En ${incoterm} el flete ya está incluido en el valor de la mercadería.`;
+            } else {
+                fleteInput.disabled = false;
+                fleteHint.textContent = `En ${incoterm} el flete corre por cuenta del comprador: sumalo aparte.`;
+            }
+        }
+
+        function actualizarCampoSeguro() {
+            const incoterm = incotermSelect.value;
+            if (SEGURO_INCLUIDO.has(incoterm)) {
+                seguroInput.value = 0;
+                seguroInput.disabled = true;
+                seguroHint.textContent = `En ${incoterm} el vendedor ya está obligado a contratar el seguro — va incluido en el valor.`;
+            } else {
+                seguroInput.disabled = false;
+                seguroHint.textContent = `En ${incoterm} el seguro no es obligatorio para el vendedor. Si lo contrataste vos, sumalo acá; si no, dejalo en 0.`;
+            }
+        }
+
+        incotermSelect.addEventListener('change', () => {
+            actualizarCampoFlete();
+            actualizarCampoSeguro();
+        });
+        actualizarCampoFlete(); // estado inicial
+        actualizarCampoSeguro(); // estado inicial
+
+        // Whitelists explícitas: nunca confiar en que el DOM no fue manipulado.
+        const VALID_INCOTERMS = new Set(['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP']);
+        const VALID_CATEGORIES = new Set(['tech', 'clothes', 'misc']);
+        const MAX_MONTO = 100000000; // Límite de cordura: evita valores absurdos/overflow en pantalla.
+
+        // Valida un campo monetario. A diferencia de `parseFloat(x) || 0`, NUNCA
+        // convierte un valor inválido en 0 silenciosamente: o es un número válido
+        // dentro de rango, o devuelve un error explícito.
+        function validarMonto(rawValue, label, { requerido = false } = {}) {
+            const trimmed = String(rawValue ?? '').trim();
+
+            if (trimmed === '') {
+                if (requerido) {
+                    return { ok: false, error: `${label}: ingresá un valor.` };
+                }
+                return { ok: true, value: 0 };
+            }
+
+            const num = Number(trimmed);
+
+            if (!Number.isFinite(num)) {
+                return { ok: false, error: `${label}: "${trimmed}" no es un número válido.` };
+            }
+            if (num < 0) {
+                return { ok: false, error: `${label}: no puede ser negativo.` };
+            }
+            if (num > MAX_MONTO) {
+                return { ok: false, error: `${label}: supera el máximo admitido (${MAX_MONTO.toLocaleString('es-AR')} USD).` };
+            }
+
+            return { ok: true, value: num };
+        }
+
+        function mostrarErrores(errores) {
+            const errorBox = document.getElementById('error-box');
+            errorBox.innerHTML = '';
+            errores.forEach(msg => {
+                const line = document.createElement('div');
+                line.textContent = msg;
+                errorBox.appendChild(line);
+            });
+            errorBox.style.display = 'block';
+        }
+
+        function ocultarErrores() {
+            const errorBox = document.getElementById('error-box');
+            errorBox.style.display = 'none';
+            errorBox.innerHTML = '';
+        }
+
+        // Construye una fila "etiqueta: valor" vía DOM (sin innerHTML), para que
+        // ningún dato termine interpretado como HTML, ni siquiera por accidente.
+        function filaResultado(label, valorTexto, destacado = false) {
+            const p = document.createElement('p');
+            p.style.margin = '4px 0';
+            const strongLabel = document.createElement(destacado ? 'strong' : 'span');
+            strongLabel.textContent = destacado ? `${label}: ${valorTexto}` : `${label}: `;
+            p.appendChild(strongLabel);
+            if (!destacado) {
+                p.appendChild(document.createTextNode(valorTexto));
+            }
+            return p;
+        }
+
         document.getElementById('calc-btn').addEventListener('click', () => {
-            const fob = parseFloat(document.getElementById('fob').value) || 0;
+            ocultarErrores();
+            const errores = [];
+
+            const incoterm = incotermSelect.value;
             const category = document.getElementById('category').value;
 
-            if (fob <= 0) {
-                alert("Por favor ingresa un valor FOB válido.");
+            if (!VALID_INCOTERMS.has(incoterm)) {
+                errores.push('Incoterm inválido: volvé a seleccionarlo de la lista.');
+            }
+            if (!VALID_CATEGORIES.has(category)) {
+                errores.push('Categoría inválida: volvé a seleccionarla de la lista.');
+            }
+
+            const valorResult = validarMonto(document.getElementById('valor').value, 'Valor de la mercadería', { requerido: true });
+            const fleteResult = validarMonto(fleteInput.value, 'Flete');
+            const seguroResult = validarMonto(seguroInput.value, 'Seguro');
+
+            [valorResult, fleteResult, seguroResult].forEach(r => {
+                if (!r.ok) errores.push(r.error);
+            });
+
+            if (errores.length > 0) {
+                mostrarErrores(errores);
                 return;
             }
+
+            const valor = valorResult.value;
+            const flete = fleteResult.value;
+            const seguro = seguroResult.value;
 
             // Definir arancel según categoría seleccionada
             let tasaArancel = 0.35; // Por defecto 35% electrónica
@@ -91,25 +280,43 @@
                 tasaArancel = 0.20; // Insumos generales
             }
 
-            const arancel = fob * tasaArancel;
-            const tasaEstadistica = fob * 0.03;
-            // Base imponible para IVA = FOB + Arancel + Tasa Estadística
-            const baseIva = fob + arancel + tasaEstadistica;
+            // Valor en Aduana (base imponible) = valor de mercadería + flete + seguro (los que no estuvieran ya incluidos)
+            const valorAduana = valor + flete + seguro;
+
+            const arancel = valorAduana * tasaArancel;
+            const tasaEstadistica = valorAduana * 0.03;
+            // Base imponible para IVA = Valor Aduana + Arancel + Tasa Estadística
+            const baseIva = valorAduana + arancel + tasaEstadistica;
             const iva = baseIva * 0.21;
 
-            const totalEstimado = fob + arancel + tasaEstadistica + iva;
+            const totalEstimado = valorAduana + arancel + tasaEstadistica + iva;
 
             const resultBox = document.getElementById('result-box');
             const outputText = document.getElementById('output-text');
+            outputText.innerHTML = '';
 
-            outputText.innerHTML = `
-                Valor FOB: <b>$${fob.toFixed(2)} USD</b><br>
-                Arancel Aduanero: $${arancel.toFixed(2)} USD<br>
-                Tasa Estadística (3%): $${tasaEstadistica.toFixed(2)} USD<br>
-                IVA Estimado (21%): $${iva.toFixed(2)} USD<br>
-                <hr style="border:0; border-top:1px solid #ccc; margin:8px 0;">
-                <strong>Total Estimado en Aduana: $${totalEstimado.toFixed(2)} USD</strong>
-            `;
+            const fmt = n => `$${n.toFixed(2)} USD`;
+
+            outputText.appendChild(filaResultado('Incoterm', incoterm));
+            outputText.appendChild(filaResultado('Valor Mercadería', fmt(valor)));
+            outputText.appendChild(filaResultado('Flete considerado', fmt(flete)));
+            outputText.appendChild(filaResultado('Seguro considerado', fmt(seguro)));
+            outputText.appendChild(filaResultado('Valor en Aduana', fmt(valorAduana), true));
+
+            const hr1 = document.createElement('hr');
+            hr1.style.cssText = 'border:0; border-top:1px solid #ccc; margin:8px 0;';
+            outputText.appendChild(hr1);
+
+            outputText.appendChild(filaResultado('Arancel Aduanero', fmt(arancel)));
+            outputText.appendChild(filaResultado('Tasa Estadística (3%)', fmt(tasaEstadistica)));
+            outputText.appendChild(filaResultado('IVA Estimado (21%)', fmt(iva)));
+
+            const hr2 = document.createElement('hr');
+            hr2.style.cssText = 'border:0; border-top:1px solid #ccc; margin:8px 0;';
+            outputText.appendChild(hr2);
+
+            outputText.appendChild(filaResultado('Total Estimado en Aduana', fmt(totalEstimado), true));
+
             resultBox.style.display = 'block';
 
             if (tg && tg.HapticFeedback) {
