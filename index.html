@@ -61,6 +61,13 @@
             margin-top: 16px;
             line-height: 1.4;
         }
+        .quote-status {
+            font-size: 12px;
+            opacity: 0.7;
+            margin: -8px 0 16px 0;
+        }
+        .quote-status.error { color: #a12620; opacity: 1; }
+        .quote-status.ok { color: #1a7a4c; }
         .error-box {
             display: none;
             background: #fdecea;
@@ -78,6 +85,8 @@
     <div class="container">
         <h2>ImpoCheck 🧮</h2>
         <p style="font-size: 14px; opacity: 0.8;">Simulador rápido de costos aduaneros.</p>
+
+        <div class="quote-status" id="quote-status">Consultando cotización Banco Nación…</div>
 
         <label for="incoterm">Incoterm (2020):</label>
         <select id="incoterm">
@@ -124,6 +133,7 @@
         <p class="disclaimer">
             El seguro es un monto manual: la app no calcula primas de seguro, solo suma lo que ingreses.
             Aranceles estimados por categoría, no por posición arancelaria (NCM) real.
+            La cotización en pesos usa el tipo de cambio BNA vendedor del momento en que abrís la app — la liquidación real de AFIP toma el tipo de cambio vigente en la fecha específica del registro de ingreso aduanero (Ley 22415, art. 639), que puede no ser hoy.
             No reemplaza una liquidación oficial de AFIP/Aduana.
         </p>
     </div>
@@ -131,6 +141,52 @@
     <script>
         const tg = window.Telegram.WebApp;
         if (tg) tg.expand(); // Expande la Mini App a pantalla completa (si corre dentro de Telegram)
+
+        // --- Cotización Banco Nación (BNA), tipo de cambio vendedor ---
+        // Fuente: dolarapi.com (gratuita, sin clave), que a su vez toma el dato de
+        // Ámbito Financiero. Es la referencia legal para liquidar tributos de
+        // importación según Ley 22415 art. 639 — NO el dólar "oficial" genérico.
+        const BNA_API_URL = 'https://dolarapi.com/v1/ambito/dolares/bna';
+        const FETCH_TIMEOUT_MS = 6000;
+
+        let cotizacionBNA = null; // { venta, fechaActualizacion } o null si no está disponible
+        const quoteStatus = document.getElementById('quote-status');
+
+        async function cargarCotizacionBNA() {
+            quoteStatus.textContent = 'Consultando cotización Banco Nación…';
+            quoteStatus.className = 'quote-status';
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+            try {
+                const response = await fetch(BNA_API_URL, { signal: controller.signal });
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    throw new Error(`La API respondió con estado ${response.status}`);
+                }
+
+                const data = await response.json();
+                const venta = Number(data.venta);
+
+                if (!Number.isFinite(venta) || venta <= 0) {
+                    throw new Error('La respuesta no trae un valor de venta válido.');
+                }
+
+                cotizacionBNA = { venta, fechaActualizacion: data.fechaActualizacion || null };
+                quoteStatus.textContent = `Cotización BNA (venta): $${venta.toFixed(2)} ARS`;
+                quoteStatus.className = 'quote-status ok';
+            } catch (err) {
+                clearTimeout(timeoutId);
+                cotizacionBNA = null;
+                const motivo = err.name === 'AbortError' ? 'tardó demasiado en responder' : 'no está disponible ahora';
+                quoteStatus.textContent = `No se pudo obtener la cotización BNA (${motivo}). Los resultados se mostrarán solo en USD.`;
+                quoteStatus.className = 'quote-status error';
+            }
+        }
+
+        cargarCotizacionBNA();
 
         // Incoterms cuyo valor de mercadería YA incluye el flete internacional hasta destino/puerto.
         // En esos casos el campo de flete queda deshabilitado (no hay que sumarlo de nuevo).
@@ -316,6 +372,24 @@
             outputText.appendChild(hr2);
 
             outputText.appendChild(filaResultado('Total Estimado en Aduana', fmt(totalEstimado), true));
+
+            if (cotizacionBNA) {
+                const totalARS = totalEstimado * cotizacionBNA.venta;
+                const fmtARS = n => `$${n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ARS`;
+                const pARS = document.createElement('p');
+                pARS.style.margin = '8px 0 0 0';
+                pARS.style.fontSize = '13px';
+                pARS.style.opacity = '0.75';
+                pARS.textContent = `≈ ${fmtARS(totalARS)} al tipo de cambio BNA vendedor ($${cotizacionBNA.venta.toFixed(2)})`;
+                outputText.appendChild(pARS);
+            } else {
+                const pARS = document.createElement('p');
+                pARS.style.margin = '8px 0 0 0';
+                pARS.style.fontSize = '13px';
+                pARS.style.opacity = '0.75';
+                pARS.textContent = 'No se pudo convertir a pesos: la cotización BNA no está disponible en este momento.';
+                outputText.appendChild(pARS);
+            }
 
             resultBox.style.display = 'block';
 

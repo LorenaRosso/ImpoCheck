@@ -15,7 +15,7 @@ A partir del valor de la mercadería, el Incoterm® 2020 pactado, flete, seguro 
 - Arancel aduanero (según categoría)
 - Tasa estadística (3%)
 - IVA (21%, sobre Valor en Aduana + arancel + tasa estadística)
-- Total estimado en aduana
+- Total estimado en aduana, en USD y convertido a ARS
 
 ### Incoterms® 2020 soportados
 
@@ -31,6 +31,18 @@ La app habilita o deshabilita los campos de Flete y Seguro automáticamente seg�
 
 > ⚠️ El campo Seguro es un monto manual: la app no calcula primas de seguro (varían por aseguradora, mercadería y ruta), solo suma lo que el usuario ingresa. Tampoco reemplaza una liquidación oficial — las tasas reales varían según posición arancelaria (NCM), acuerdos comerciales vigentes y normativa de AFIP/Aduana al momento de la operación.
 
+### Conversión a pesos (ARS)
+
+Al cargar, la app consulta en vivo la cotización del **dólar Banco Nación (BNA), tipo de cambio vendedor** — vía la API pública y gratuita [dolarapi.com](https://dolarapi.com) — y la usa para mostrar el total estimado también en pesos.
+
+Esta cotización, y no el dólar "oficial" genérico, es la referencia legal para liquidar tributos de importación en Argentina (Ley 22415, art. 639). La app toma el valor vigente al momento de abrirla; la liquidación real de AFIP usa el tipo de cambio de la fecha específica de registro de ingreso aduanero, que puede ser otro día.
+
+Si la API no responde (timeout de 6s, error de red, o formato inesperado), la app lo informa explícitamente y sigue funcionando normalmente solo en USD — no hay ningún valor de respaldo inventado.
+
+### Validación de datos
+
+Todos los campos numéricos (valor, flete, seguro) se validan antes de calcular: no se aceptan negativos, texto no numérico, ni valores fuera de un rango razonable. Un campo inválido muestra un error específico en vez de calcularse silenciosamente como 0 — evita que un error de tipeo pase desapercibido en el resultado. Incoterm y categoría se validan contra una lista fija de valores permitidos.
+
 ## Por qué existe
 
 Vengo de un perfil de **Comercio Exterior y Aduana** (Técnico Superior, IFTS N°6) y de auditoría de procesos administrativos. Quería una herramienta rápida para dar una primera estimación de costos de importación sin abrir una planilla — y aprovechar que Telegram permite distribuir una mini-app sin pedirle a nadie que instale nada.
@@ -39,6 +51,7 @@ Vengo de un perfil de **Comercio Exterior y Aduana** (Técnico Superior, IFTS N�
 
 - HTML / CSS / JavaScript vanilla (sin frameworks ni dependencias de build)
 - [Telegram Mini Apps SDK](https://core.telegram.org/bots/webapps) para integrarse con el tema visual y los gestos de Telegram
+- [dolarapi.com](https://dolarapi.com) para la cotización BNA en tiempo real (API pública, sin clave)
 - Desplegado en [Vercel](https://vercel.com)
 - Bot registrado vía BotFather, con botón de menú que abre la Mini App (sin backend propio: la lógica corre 100% en el cliente)
 
