@@ -2,7 +2,7 @@
 
 Simulador rápido de costos estimados de importación (arancel, tasa estadística e IVA) para Argentina, distribuido como **Telegram Mini App**.
 
-🔗 **Demo en vivo:** https://impo-check.vercel.app/
+🔗 **Demo en vivo:** https://impocheck.vercel.app/
 🤖 **Vía Telegram:** [@ImpoCheckBot](https://t.me/ImpoCheckBot)
 
 ---
